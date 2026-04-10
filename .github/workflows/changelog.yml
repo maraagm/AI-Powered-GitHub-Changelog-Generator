@@ -1,0 +1,69 @@
+name: Generate Changelog
+
+on:
+  # Trigger manually from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.2.0)"
+        required: true
+        type: string
+      limit:
+        description: "Maximum number of merged PRs to include"
+        required: false
+        default: "50"
+        type: string
+
+  # Also trigger automatically when a release is published
+  release:
+    types: [published]
+
+jobs:
+  generate-changelog:
+    name: Generate AI Changelog
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # needed to commit the updated CHANGELOG.md
+      pull-requests: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "version=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python main.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --limit "${{ github.event.inputs.limit || '50' }}"
+
+      - name: Commit updated CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "docs: update CHANGELOG.md for ${{ steps.version.outputs.version }}"
+          git push
