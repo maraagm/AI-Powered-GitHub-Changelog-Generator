@@ -2,5 +2,8 @@
 requests>=2.32.3
 openai>=1.75.0
 
+# HTML template rendering
+jinja2>=3.1.4
+
 # Environment variable management for local development
 python-dotenv>=1.0.1

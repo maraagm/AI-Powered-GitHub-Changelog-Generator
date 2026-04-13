@@ -60,10 +60,10 @@ jobs:
             --version "${{ steps.version.outputs.version }}" \
             --limit "${{ github.event.inputs.limit || '50' }}"
 
-      - name: Commit updated CHANGELOG.md
+      - name: Commit updated changelog files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git diff --cached --quiet || git commit -m "docs: update CHANGELOG.md for ${{ steps.version.outputs.version }}"
+          git add output/CHANGELOG.md output/changelog.html
+          git diff --cached --quiet || git commit -m "docs: update changelog for ${{ steps.version.outputs.version }}"
           git push
