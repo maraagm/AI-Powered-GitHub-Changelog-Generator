@@ -3,11 +3,15 @@
 import os
 from datetime import datetime, timezone
 
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class ChangelogService:
     """Generates and manages the CHANGELOG.md file."""
 
-    def __init__(self, output_path: str = "CHANGELOG.md"):
+    def __init__(self, output_path: str = "output/CHANGELOG.md"):
         """
         Initialize the changelog service.
 
@@ -60,9 +64,11 @@ class ChangelogService:
         preserving all previous entries.
 
         Args:
-            changelog_data: Dictionary returned by ChangelogSummarizer.summarize().
+            changelog_data: Dictionary returned by OpenAIClient.summarize().
         """
         new_entry = self._format_entry(changelog_data)
+
+        os.makedirs(os.path.dirname(self.output_path) or ".", exist_ok=True)
 
         if os.path.exists(self.output_path):
             with open(self.output_path, encoding="utf-8") as fh:
@@ -89,6 +95,7 @@ class ChangelogService:
         with open(self.output_path, "w", encoding="utf-8") as fh:
             fh.write(updated_content)
 
+        logger.info("Changelog written to %s", self.output_path)
         print(f"Changelog written to {self.output_path}")
 
     def preview(self, changelog_data: dict) -> str:
@@ -96,7 +103,7 @@ class ChangelogService:
         Return the formatted changelog entry without writing to disk.
 
         Args:
-            changelog_data: Dictionary returned by ChangelogSummarizer.summarize().
+            changelog_data: Dictionary returned by OpenAIClient.summarize().
 
         Returns:
             Markdown-formatted changelog entry string.

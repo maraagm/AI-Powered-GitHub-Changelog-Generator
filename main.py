@@ -4,7 +4,7 @@ AI-Powered GitHub Changelog Generator
 Entry point for the changelog generation pipeline.
 
 Usage:
-    python main.py --version v1.2.0 [--repo owner/repo] [--limit 50] [--output CHANGELOG.md]
+    python main.py --version v1.2.0 [--repo owner/repo] [--limit 50] [--output output/CHANGELOG.md]
 
 Environment variables:
     GITHUB_TOKEN        GitHub personal access token (required)
@@ -15,10 +15,16 @@ Environment variables:
 import argparse
 import sys
 
-from src.ai.summarizer import ChangelogSummarizer
+from src.ai.openai_client import OpenAIClient
 from src.github.client import GitHubClient
-from src.services.changelog import ChangelogService
-from src.utils.helpers import normalize_version, validate_version
+from src.github.parser import PRParser
+from src.services.changelog_service import ChangelogService
+from src.services.html_renderer import HTMLRenderer
+from src.services.versioning import normalize_version, validate_version
+from src.utils.logger import get_logger
+from src.utils.storage import load_last_pr, save_last_pr
+
+logger = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="CHANGELOG.md",
-        help="Output path for the changelog file (default: CHANGELOG.md).",
+        default="output/CHANGELOG.md",
+        help="Output path for the changelog file (default: output/CHANGELOG.md).",
     )
     parser.add_argument(
         "--model",
@@ -56,6 +62,11 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Print the changelog entry to stdout instead of writing to a file.",
+    )
+    parser.add_argument(
+        "--no-html",
+        action="store_true",
+        help="Skip generating the HTML changelog.",
     )
     return parser.parse_args()
 
@@ -73,6 +84,7 @@ def main() -> None:
         )
         sys.exit(1)
 
+    logger.info("Generating changelog for version %s...", version)
     print(f"Generating changelog for version {version}...")
 
     # 1. Fetch merged pull requests from GitHub
@@ -85,12 +97,13 @@ def main() -> None:
         sys.exit(0)
 
     print(f"Found {len(pull_requests)} merged pull request(s). Fetching file changes...")
-    pull_requests = github_client.enrich_pull_requests(pull_requests)
+    parser = PRParser(github_client)
+    pull_requests = parser.enrich(pull_requests)
 
     # 2. Summarise pull requests with OpenAI
     print("Summarising changes with OpenAI...")
-    summarizer = ChangelogSummarizer(model=args.model)
-    changelog_data = summarizer.summarize(pull_requests, version)
+    ai_client = OpenAIClient(model=args.model)
+    changelog_data = ai_client.summarize(pull_requests, version)
 
     # 3. Generate the changelog
     service = ChangelogService(output_path=args.output)
@@ -100,6 +113,18 @@ def main() -> None:
         print(service.preview(changelog_data))
     else:
         service.write(changelog_data)
+
+        # Generate HTML changelog unless suppressed
+        if not args.no_html:
+            renderer = HTMLRenderer()
+            renderer.write(changelog_data)
+
+        # Persist the highest PR number that was processed
+        if pull_requests:
+            last_pr = max(pr["number"] for pr in pull_requests)
+            save_last_pr(last_pr)
+            logger.debug("Last processed PR stored: #%s", last_pr)
+
         print("Done!")
 
 

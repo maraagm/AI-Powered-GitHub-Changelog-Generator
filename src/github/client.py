@@ -3,6 +3,10 @@
 import os
 import requests
 
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class GitHubClient:
     """Client for interacting with the GitHub REST API."""
@@ -61,6 +65,7 @@ class GitHubClient:
         # Filter to only merged pull requests
         all_prs = response.json()
         merged_prs = [pr for pr in all_prs if pr.get("merged_at") is not None]
+        logger.debug("Fetched %d merged PR(s) from GitHub.", len(merged_prs))
 
         return merged_prs[:limit]
 
@@ -79,36 +84,3 @@ class GitHubClient:
         response.raise_for_status()
         return response.json()
 
-    def enrich_pull_requests(self, pull_requests: list[dict]) -> list[dict]:
-        """
-        Enrich pull request data with changed file information.
-
-        Args:
-            pull_requests: List of pull request dictionaries.
-
-        Returns:
-            Enriched list of pull request dictionaries including changed files.
-        """
-        enriched = []
-        for pr in pull_requests:
-            pr_number = pr["number"]
-            try:
-                files = self.get_pull_request_files(pr_number)
-                changed_files = [f["filename"] for f in files]
-            except requests.HTTPError as exc:
-                print(f"Warning: Could not fetch files for PR #{pr_number}: {exc}")
-                changed_files = []
-
-            enriched.append(
-                {
-                    "number": pr_number,
-                    "title": pr.get("title", ""),
-                    "body": pr.get("body") or "",
-                    "merged_at": pr.get("merged_at", ""),
-                    "user": pr.get("user", {}).get("login", "unknown"),
-                    "labels": [label["name"] for label in pr.get("labels", [])],
-                    "changed_files": changed_files,
-                }
-            )
-
-        return enriched
